@@ -37,7 +37,19 @@ export const createEquationNumberProcessor = (plugin: LatexReferencer) => async 
 function preprocessForPdfExport(plugin: LatexReferencer, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
 
     try {
-        const topLevelMathDivs = el.querySelectorAll<HTMLElement>(':scope > div.math.math-block > mjx-container.MathJax[display="true"]');
+        // Debug: Log the structure we're working with
+        console.log('[PDF Export Debug] Element structure:', {
+            tagName: el.tagName,
+            classList: Array.from(el.classList),
+            childrenCount: el.children.length,
+            innerHTML: el.innerHTML.substring(0, 500) // First 500 chars
+        });
+
+        // Use a more flexible selector that doesn't require direct child relationship
+        // The strict selector ':scope > div.math.math-block > mjx-container...' fails when
+        // equations are nested in additional wrapper divs (common in PDF export)
+        const topLevelMathDivs = el.querySelectorAll<HTMLElement>('mjx-container.MathJax[display="true"]');
+        console.log('[PDF Export Debug] Found math divs:', topLevelMathDivs.length);
 
         const page = plugin.indexManager.index.getMarkdownPage(ctx.sourcePath);
         if (!page) {
@@ -45,12 +57,25 @@ function preprocessForPdfExport(plugin: LatexReferencer, el: HTMLElement, ctx: M
             return;
         }
 
+        // Debug: Count equation blocks in index
+        let equationBlockCount = 0;
+        for (const section of page.$sections) {
+            for (const block of section.$blocks) {
+                if (EquationBlock.isEquationBlock(block)) equationBlockCount++;
+            }
+        }
+        console.log('[PDF Export Debug] Equation blocks in index:', equationBlockCount);
+
         let equationIndex = 0;
         for (const section of page.$sections) {
             for (const block of section.$blocks) {
                 if (!EquationBlock.isEquationBlock(block)) continue;
 
                 const div = topLevelMathDivs[equationIndex++];
+                if (!div) {
+                    console.warn('[PDF Export Debug] Missing div for equation at index', equationIndex - 1, 'block ID:', block.$id);
+                    continue;
+                }
                 if (block.$printName) div.setAttribute('data-equation-id', block.$id);
             }
         }
